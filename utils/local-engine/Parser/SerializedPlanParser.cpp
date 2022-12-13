@@ -111,7 +111,7 @@ void SerializedPlanParser::parseExtensions(
 }
 
 std::shared_ptr<DB::ActionsDAG> SerializedPlanParser::expressionsToActionsDAG(
-        const ::google::protobuf::RepeatedPtrField<substrait::Expression> & expressions,
+        const std::vector<substrait::Expression> & expressions,
         const DB::Block & header,
         const DB::Block & read_schema)
 {
@@ -139,21 +139,21 @@ std::shared_ptr<DB::ActionsDAG> SerializedPlanParser::expressionsToActionsDAG(
         }
         else if (expr.has_scalar_function())
         {
-            std::string name;
+            std::string result_name;
             std::vector<String> useless;
-            actions_dag = parseFunction(header, expr, name, useless, actions_dag, true);
-            if (!name.empty())
+            actions_dag = parseFunction(header, expr, result_name, useless, actions_dag, true);
+            if (!result_name.empty())
             {
-                if (distinct_columns.contains(name))
+                if (distinct_columns.contains(result_name))
                 {
-                    auto unique_name = getUniqueName(name);
-                    required_columns.emplace_back(NameWithAlias(name, unique_name));
+                    auto unique_name = getUniqueName(result_name);
+                    required_columns.emplace_back(NameWithAlias(result_name, unique_name));
                     distinct_columns.emplace(unique_name);
                 }
                 else
                 {
-                    required_columns.emplace_back(NameWithAlias(name, name));
-                    distinct_columns.emplace(name);
+                    required_columns.emplace_back(NameWithAlias(result_name, result_name));
+                    distinct_columns.emplace(result_name);
                 }
             }
         }
@@ -174,10 +174,9 @@ std::shared_ptr<DB::ActionsDAG> SerializedPlanParser::expressionsToActionsDAG(
             }
         }
         else
-        {
             throw Exception(ErrorCodes::BAD_ARGUMENTS, "unsupported projection type {}.", magic_enum::enum_name(expr.rex_type_case()));
-        }
     }
+
     actions_dag->project(required_columns);
     return actions_dag;
 }
@@ -661,25 +660,47 @@ QueryPlanPtr SerializedPlanParser::parseOp(const substrait::Rel & rel)
             addRemoveNullableStep(*query_plan, required_columns);
             break;
         }
+        case substrait::Rel::RelTypeCase::kGenerate:
         case substrait::Rel::RelTypeCase::kProject: {
-            const auto & project = rel.project();
-            last_project = &project;
-            query_plan = parseOp(project.input());
-            // for prewhere
-            bool is_mergetree_input = project.input().has_read() && !project.input().read().has_local_files();
-            Block read_schema;
-            if (is_mergetree_input)
+            const substrait::Rel * input = nullptr;
+            bool is_generate = false;
+            std::vector<substrait::Expression> expressions;
+
+            if (rel.has_project())
             {
-                read_schema = parseNameStruct(project.input().read().base_schema());
+                const auto & project = rel.project();
+                last_project = &project;
+                input = &project.input();
+
+                expressions.reserve(project.expressions_size());
+                for (int i=0; i<project.expressions_size(); ++i)
+                    expressions.emplace_back(project.expressions(i));
             }
             else
             {
-                read_schema = query_plan->getCurrentDataStream().header;
+                const auto & generate = rel.generate();
+                input = &generate.input();
+                is_generate = true;
+
+                expressions.reserve(generate.child_output_size() + 1);
+                for (int i = 0; i < generate.child_output_size(); ++i)
+                    expressions.push_back(generate.child_output(i));
+                expressions.emplace_back(generate.generator());
             }
-            const auto & expressions = project.expressions();
+
+            query_plan = parseOp(*input);
+
+            // for prewhere
+            Block read_schema;
+            bool is_mergetree_input = input->has_read() && !input->read().has_local_files();
+            if (is_mergetree_input)
+                read_schema = parseNameStruct(input->read().base_schema());
+            else
+                read_schema = query_plan->getCurrentDataStream().header;
+
             auto actions_dag = expressionsToActionsDAG(expressions, query_plan->getCurrentDataStream().header, read_schema);
             auto expression_step = std::make_unique<ExpressionStep>(query_plan->getCurrentDataStream(), actions_dag);
-            expression_step->setStepDescription("Project");
+            expression_step->setStepDescription(is_generate ? "Generate" : "Project");
             query_plan->addStep(std::move(expression_step));
             break;
         }
@@ -1067,6 +1088,15 @@ const ActionsDAG::Node * SerializedPlanParser::parseFunctionWithDAG(
         result_name = args[0]->result_name;
         actions_dag->addOrReplaceInIndex(*args[0]);
         result_node = &actions_dag->addAlias(actions_dag->findInIndex(result_name), result_name);
+    }
+    else if (function_name == "arrayJoin")
+    {
+        std::string args_name;
+        join(args, ',', args_name);
+        result_name = function_name + "(" + args_name + ")";
+        result_node = &actions_dag->addArrayJoin(*args[0], result_name);
+        if (keep_result)
+            actions_dag->addOrReplaceInIndex(*result_node);
     }
     else
     {

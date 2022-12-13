@@ -116,7 +116,14 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     {"avg", "avg"},
     {"sum", "sum"},
     {"min", "min"},
-    {"max", "max"}
+    {"max", "max"},
+
+    // array functions
+    {"array", "array"},
+    {"size", "length"},
+
+    // table-valued generator function
+    {"explode", "arrayJoin"},
 };
 
 static const std::set<std::string> FUNCTION_NEED_KEEP_ARGUMENTS = {"alias"};
@@ -155,7 +162,7 @@ public:
 
     void parseExtensions(const ::google::protobuf::RepeatedPtrField<substrait::extensions::SimpleExtensionDeclaration> & extensions);
     std::shared_ptr<DB::ActionsDAG> expressionsToActionsDAG(
-        const ::google::protobuf::RepeatedPtrField<substrait::Expression> & expressions,
+        const std::vector<substrait::Expression> & expressions,
         const DB::Block & header,
         const DB::Block & read_schema);
 
@@ -242,6 +249,7 @@ private:
     std::vector<jobject> input_iters;
     const substrait::ProjectRel * last_project = nullptr;
     ContextPtr context;
+
 };
 
 struct SparkBuffer
