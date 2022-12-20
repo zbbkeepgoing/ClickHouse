@@ -38,10 +38,15 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     {"not", "not"},
     {"xor", "xor"},
 
-    {"to_date", "toDate"},
     {"extract", ""},
     {"cast", ""},
     {"alias", "alias"},
+
+    /// datetime functions
+    {"to_date", "toDate"},
+    {"quarter", "toQuarter"},
+    {"to_unix_timestamp", "toUnixTimestamp"},
+    {"unix_timestamp", "toUnixTimestamp"},
 
     /// arithmetic functions
     {"subtract", "minus"},
@@ -87,7 +92,6 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     {"radians", "radians"},
     {"greatest", "greatest"},
     {"least", "least"},
-    {"quarter", "toQuarter"},
     {"shiftleft", "bitShiftLeft"},
     {"shiftright", "bitShiftRight"},
     {"check_overflow", "check_overflow"},
@@ -110,7 +114,9 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     {"strpos", "position"},
     {"char_length", "char_length"},
     {"replace", "replaceAll"},
+    {"regexp_replace", "replaceRegexpAll"},
     {"chr", "char"},
+    {"rlike", "match"},
     {"ascii", "ascii"},
     {"split", "splitByRegexp"},
     {"concat_ws", "concat_ws"},
@@ -118,12 +124,22 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     // in functions
     {"in", "in"},
 
+    // null related functions
+    {"coalesce", "coalesce"},
+
     // aggregate functions
     {"count", "count"},
     {"avg", "avg"},
     {"sum", "sum"},
     {"min", "min"},
     {"max", "max"},
+    {"collect_list", "groupArray"},
+
+    // date or datetime functions
+    {"from_unixtime", "FROM_UNIXTIME"},
+    {"date_add", "addDays"},
+    {"date_sub", "subtractDays"},
+    {"datediff", "dateDiff"},
 
     // array functions
     {"array", "array"},
