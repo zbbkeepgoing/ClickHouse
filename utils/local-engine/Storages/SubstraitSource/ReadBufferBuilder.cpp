@@ -1,20 +1,17 @@
 #include <memory>
-#include <mutex>
 #include <Storages/SubstraitSource/ReadBufferBuilder.h>
-#include <Common/ErrorCodes.h>
 #include "IO/ReadSettings.h"
 #include <Disks/IO/ReadBufferFromAzureBlobStorage.h>
 #include <Storages/SubstraitSource/SubstraitFileSource.h>
 #include <Storages/HDFS/ReadBufferFromHDFS.h>
 #include <IO/ReadBufferFromFile.h>
 #include <Interpreters/Context_fwd.h>
-#include <unistd.h>
 #include <sys/stat.h>
 #include <Poco/URI.h>
 #include <IO/S3Common.h>
 #include <IO/ReadBufferFromS3.h>
-#include <Disks/ObjectStorages/AzureBlobStorage/AzureBlobStorageAuth.h>
 #include <aws/core/client/DefaultRetryStrategy.h>
+#include <aws/s3/S3Client.h>
 #include <Storages/StorageS3Settings.h>
 
 #include <Poco/Logger.h>

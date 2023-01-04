@@ -7,6 +7,7 @@ include(FindJNI)
 
 #set(JNI_NATIVE_SOURCES local_engine_jni.cpp)
 set(LOCALENGINE_SHARED_LIB ch)
+set (ENABLE_CURL_BUILD OFF)
 
 add_subdirectory(proto)
 

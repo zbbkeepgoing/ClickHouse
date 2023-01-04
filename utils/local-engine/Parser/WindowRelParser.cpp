@@ -331,7 +331,7 @@ void WindowRelParser::tryAddProjectionBeforeWindow(
                 // an exception of not found column(2) will throw.
                 const auto * node = parseArgument(actions_dag, arg);
                 names.push_back(node->result_name);
-                actions_dag->addOrReplaceInIndex(*node);
+                actions_dag->addOrReplaceInOutputs(*node);
                 need_project = true;
             }
             else

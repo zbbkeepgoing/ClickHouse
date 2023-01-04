@@ -20,7 +20,6 @@
 #include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Storages/SubstraitSource/FormatFile.h>
 #include <Storages/SubstraitSource/SubstraitFileSource.h>
-#include <base/logger_useful.h>
 #include <base/types.h>
 #include <substrait/plan.pb.h>
 #include <magic_enum.hpp>
