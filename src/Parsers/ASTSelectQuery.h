@@ -32,7 +32,8 @@ public:
         LIMIT_BY,
         LIMIT_OFFSET,
         LIMIT_LENGTH,
-        SETTINGS
+        SETTINGS,
+        INTERPOLATE
     };
 
     static String expressionToString(Expression expr)
@@ -69,6 +70,8 @@ public:
                 return "LIMIT LENGTH";
             case Expression::SETTINGS:
                 return "SETTINGS";
+            case Expression::INTERPOLATE:
+                return "INTERPOLATE";
         }
         return "";
     }
@@ -79,10 +82,12 @@ public:
     ASTPtr clone() const override;
 
     bool distinct = false;
+    bool group_by_all = false;
     bool group_by_with_totals = false;
     bool group_by_with_rollup = false;
     bool group_by_with_cube = false;
     bool group_by_with_constant_keys = false;
+    bool group_by_with_grouping_sets = false;
     bool limit_with_ties = false;
 
     ASTPtr & refSelect()    { return getExpression(Expression::SELECT); }
@@ -98,7 +103,7 @@ public:
     ASTPtr where()          const { return getExpression(Expression::WHERE); }
     ASTPtr groupBy()        const { return getExpression(Expression::GROUP_BY); }
     ASTPtr having()         const { return getExpression(Expression::HAVING); }
-    ASTPtr window() const { return getExpression(Expression::WINDOW); }
+    ASTPtr window()         const { return getExpression(Expression::WINDOW); }
     ASTPtr orderBy()        const { return getExpression(Expression::ORDER_BY); }
     ASTPtr limitByOffset()  const { return getExpression(Expression::LIMIT_BY_OFFSET); }
     ASTPtr limitByLength()  const { return getExpression(Expression::LIMIT_BY_LENGTH); }
@@ -106,6 +111,7 @@ public:
     ASTPtr limitOffset()    const { return getExpression(Expression::LIMIT_OFFSET); }
     ASTPtr limitLength()    const { return getExpression(Expression::LIMIT_LENGTH); }
     ASTPtr settings()       const { return getExpression(Expression::SETTINGS); }
+    ASTPtr interpolate()    const { return getExpression(Expression::INTERPOLATE); }
 
     bool hasFiltration() const { return where() || prewhere() || having(); }
 
@@ -126,6 +132,7 @@ public:
     std::pair<ASTPtr, bool> arrayJoinExpressionList() const;
 
     const ASTTablesInSelectQueryElement * join() const;
+    bool hasJoin() const;
     bool final() const;
     bool withFill() const;
     void replaceDatabaseAndTable(const String & database_name, const String & table_name);
@@ -135,7 +142,7 @@ public:
 
     void setFinal();
 
-    virtual QueryKind getQueryKind() const override { return QueryKind::Select; }
+    QueryKind getQueryKind() const override { return QueryKind::Select; }
 
 protected:
     void formatImpl(const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const override;

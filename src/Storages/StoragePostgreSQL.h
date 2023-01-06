@@ -1,9 +1,8 @@
 #pragma once
 
-#include "config_core.h"
+#include "config.h"
 
 #if USE_LIBPQXX
-#include <base/shared_ptr_helper.h>
 #include <Interpreters/Context.h>
 #include <Storages/IStorage.h>
 #include <Core/PostgreSQL/PoolWithFailover.h>
@@ -17,9 +16,8 @@ class Logger;
 namespace DB
 {
 
-class StoragePostgreSQL final : public shared_ptr_helper<StoragePostgreSQL>, public IStorage
+class StoragePostgreSQL final : public IStorage
 {
-    friend struct shared_ptr_helper<StoragePostgreSQL>;
 public:
     StoragePostgreSQL(
         const StorageID & table_id_,
@@ -40,15 +38,13 @@ public:
         ContextPtr context,
         QueryProcessingStage::Enum processed_stage,
         size_t max_block_size,
-        unsigned num_streams) override;
+        size_t num_streams) override;
 
     SinkToStoragePtr write(const ASTPtr & query, const StorageMetadataPtr & /*metadata_snapshot*/, ContextPtr context) override;
 
     static StoragePostgreSQLConfiguration getConfiguration(ASTs engine_args, ContextPtr context);
 
 private:
-    friend class PostgreSQLBlockOutputStream;
-
     String remote_table_name;
     String remote_table_schema;
     String on_conflict;

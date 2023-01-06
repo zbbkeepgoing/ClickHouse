@@ -153,10 +153,23 @@ using FunctionConcatWithSeparator = ConcatWithSeparatorImpl<NameConcatWithSepara
 using FunctionConcatWithSeparatorAssumeInjective = ConcatWithSeparatorImpl<NameConcatWithSeparatorAssumeInjective, true>;
 }
 
-void registerFunctionConcatWithSeparator(FunctionFactory & factory)
+REGISTER_FUNCTION(ConcatWithSeparator)
 {
-    factory.registerFunction<FunctionConcatWithSeparator>();
-    factory.registerFunction<FunctionConcatWithSeparatorAssumeInjective>();
+    factory.registerFunction<FunctionConcatWithSeparator>({
+        R"(
+Returns the concatenation strings separated by string separator. Syntax: concatWithSeparator(sep, expr1, expr2, expr3...)
+        )",
+        Documentation::Examples{{"concatWithSeparator", "SELECT concatWithSeparator('a', '1', '2', '3')"}},
+        Documentation::Categories{"String"}});
+
+    factory.registerFunction<FunctionConcatWithSeparatorAssumeInjective>({
+        R"(
+Same as concatWithSeparator, the difference is that you need to ensure that concatWithSeparator(sep, expr1, expr2, expr3...) → result is injective, it will be used for optimization of GROUP BY.
+
+The function is named “injective” if it always returns different result for different values of arguments. In other words: different arguments never yield identical result.
+        )",
+        Documentation::Examples{{"concatWithSeparatorAssumeInjective", "SELECT concatWithSeparatorAssumeInjective('a', '1', '2', '3')"}},
+        Documentation::Categories{"String"}});
 
     /// Compatibility with Spark:
     factory.registerAlias("concat_ws", "concatWithSeparator", FunctionFactory::CaseInsensitive);

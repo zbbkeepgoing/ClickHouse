@@ -1,4 +1,7 @@
-# system.functions {#system-functions}
+---
+slug: /en/operations/system-tables/functions
+---
+# functions
 
 Contains information about normal and aggregate functions.
 

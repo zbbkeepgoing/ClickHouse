@@ -1,21 +1,31 @@
 #!/usr/bin/env python3
 
+import argparse
 import csv
 import logging
-import subprocess
 import os
+import subprocess
 import sys
+import atexit
+from typing import List, Tuple
 
 from github import Github
 
 from env_helper import TEMP_PATH, REPO_COPY, REPORTS_PATH
 from s3_helper import S3Helper
 from get_robot_token import get_best_robot_token
-from pr_info import PRInfo
+from pr_info import FORCE_TESTS_LABEL, PRInfo
 from build_download_helper import download_all_deb_packages
+from download_release_packages import download_last_release
 from upload_result_helper import upload_results
 from docker_pull_helper import get_image_with_version
-from commit_status_helper import post_commit_status, get_commit, override_status
+from commit_status_helper import (
+    post_commit_status,
+    get_commit,
+    override_status,
+    post_commit_status_to_file,
+    update_mergeable_check,
+)
 from clickhouse_helper import (
     ClickHouseHelper,
     mark_flaky_tests,
@@ -24,6 +34,8 @@ from clickhouse_helper import (
 from stopwatch import Stopwatch
 from rerun_helper import RerunHelper
 from tee_popen import TeePopen
+
+NO_CHANGES_MSG = "Nothing to run"
 
 
 def get_additional_envs(check_name, run_by_hash_num, run_by_hash_total):
@@ -35,7 +47,6 @@ def get_additional_envs(check_name, run_by_hash_num, run_by_hash_total):
     if "wide parts enabled" in check_name:
         result.append("USE_POLYMORPHIC_PARTS=1")
 
-    # temporary
     if "s3 storage" in check_name:
         result.append("USE_S3_STORAGE_FOR_MERGE_TREE=1")
 
@@ -78,7 +89,8 @@ def get_run_command(
 
     envs = [
         f"-e MAX_RUN_TIME={int(0.9 * kill_timeout)}",
-        '-e S3_URL="https://clickhouse-datasets.s3.amazonaws.com"',
+        # a static link, don't use S3_URL or S3_DOWNLOAD
+        '-e S3_URL="https://s3.amazonaws.com/clickhouse-datasets"',
     ]
 
     if flaky_check:
@@ -111,8 +123,11 @@ def get_tests_to_run(pr_info):
     return list(result)
 
 
-def process_results(result_folder, server_log_path):
-    test_results = []
+def process_results(
+    result_folder: str,
+    server_log_path: str,
+) -> Tuple[str, str, List[Tuple[str, str]], List[str]]:
+    test_results = []  # type: List[Tuple[str, str]]
     additional_files = []
     # Just upload all files from result_folder.
     # If task provides processed results, then it's responsible for content of result_folder.
@@ -155,11 +170,29 @@ def process_results(result_folder, server_log_path):
         return "error", "Not found test_results.tsv", test_results, additional_files
 
     with open(results_path, "r", encoding="utf-8") as results_file:
-        test_results = list(csv.reader(results_file, delimiter="\t"))
+        test_results = list(csv.reader(results_file, delimiter="\t"))  # type: ignore
     if len(test_results) == 0:
         return "error", "Empty test_results.tsv", test_results, additional_files
 
     return state, description, test_results, additional_files
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("check_name")
+    parser.add_argument("kill_timeout", type=int)
+    parser.add_argument(
+        "--validate-bugfix",
+        action="store_true",
+        help="Check that added tests failed on latest stable",
+    )
+    parser.add_argument(
+        "--post-commit-status",
+        default="commit_status",
+        choices=["commit_status", "file"],
+        help="Where to public post commit status",
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
@@ -170,18 +203,42 @@ if __name__ == "__main__":
     temp_path = TEMP_PATH
     repo_path = REPO_COPY
     reports_path = REPORTS_PATH
+    post_commit_path = os.path.join(temp_path, "functional_commit_status.tsv")
 
-    check_name = sys.argv[1]
-    kill_timeout = int(sys.argv[2])
+    args = parse_args()
+    check_name = args.check_name
+    kill_timeout = args.kill_timeout
+    validate_bugfix_check = args.validate_bugfix
 
     flaky_check = "flaky" in check_name.lower()
-    gh = Github(get_best_robot_token())
 
-    pr_info = PRInfo(need_changed_files=flaky_check)
+    run_changed_tests = flaky_check or validate_bugfix_check
+    gh = Github(get_best_robot_token(), per_page=100)
+
+    # For validate_bugfix_check we need up to date information about labels, so pr_event_from_api is used
+    pr_info = PRInfo(
+        need_changed_files=run_changed_tests, pr_event_from_api=validate_bugfix_check
+    )
+
+    atexit.register(update_mergeable_check, gh, pr_info, check_name)
+
+    if not os.path.exists(temp_path):
+        os.makedirs(temp_path)
+
+    if validate_bugfix_check and "pr-bugfix" not in pr_info.labels:
+        if args.post_commit_status == "file":
+            post_commit_status_to_file(
+                post_commit_path,
+                f"Skipped (no pr-bugfix in {pr_info.labels})",
+                "success",
+                "null",
+            )
+        logging.info("Skipping '%s' (no pr-bugfix in %s)", check_name, pr_info.labels)
+        sys.exit(0)
 
     if "RUN_BY_HASH_NUM" in os.environ:
-        run_by_hash_num = int(os.getenv("RUN_BY_HASH_NUM"))
-        run_by_hash_total = int(os.getenv("RUN_BY_HASH_TOTAL"))
+        run_by_hash_num = int(os.getenv("RUN_BY_HASH_NUM", "0"))
+        run_by_hash_total = int(os.getenv("RUN_BY_HASH_TOTAL", "0"))
         check_name_with_group = (
             check_name + f" [{run_by_hash_num + 1}/{run_by_hash_total}]"
         )
@@ -195,19 +252,25 @@ if __name__ == "__main__":
         logging.info("Check is already finished according to github status, exiting")
         sys.exit(0)
 
-    if not os.path.exists(temp_path):
-        os.makedirs(temp_path)
-
     tests_to_run = []
-    if flaky_check:
+    if run_changed_tests:
         tests_to_run = get_tests_to_run(pr_info)
         if not tests_to_run:
             commit = get_commit(gh, pr_info.sha)
-            commit.create_status(
-                context=check_name_with_group,
-                description="Not found changed stateless tests",
-                state="success",
-            )
+            state = override_status("success", check_name, validate_bugfix_check)
+            if args.post_commit_status == "commit_status":
+                commit.create_status(
+                    context=check_name_with_group,
+                    description=NO_CHANGES_MSG,
+                    state=state,
+                )
+            elif args.post_commit_status == "file":
+                post_commit_status_to_file(
+                    post_commit_path,
+                    description=NO_CHANGES_MSG,
+                    state=state,
+                    report_url="null",
+                )
             sys.exit(0)
 
     image_name = get_image_name(check_name)
@@ -219,7 +282,10 @@ if __name__ == "__main__":
     if not os.path.exists(packages_path):
         os.makedirs(packages_path)
 
-    download_all_deb_packages(check_name, reports_path, packages_path)
+    if validate_bugfix_check:
+        download_last_release(packages_path)
+    else:
+        download_all_deb_packages(check_name, reports_path, packages_path)
 
     server_log_path = os.path.join(temp_path, "server_log")
     if not os.path.exists(server_log_path):
@@ -229,11 +295,14 @@ if __name__ == "__main__":
     if not os.path.exists(result_path):
         os.makedirs(result_path)
 
-    run_log_path = os.path.join(result_path, "runlog.log")
+    run_log_path = os.path.join(result_path, "run.log")
 
     additional_envs = get_additional_envs(
         check_name, run_by_hash_num, run_by_hash_total
     )
+    if validate_bugfix_check:
+        additional_envs.append("GLOBAL_TAGS=no-random-settings")
+
     run_command = get_run_command(
         packages_path,
         repo_tests_path,
@@ -256,12 +325,12 @@ if __name__ == "__main__":
 
     subprocess.check_call(f"sudo chown -R ubuntu:ubuntu {temp_path}", shell=True)
 
-    s3_helper = S3Helper("https://s3.amazonaws.com")
+    s3_helper = S3Helper()
 
     state, description, test_results, additional_logs = process_results(
         result_path, server_log_path
     )
-    state = override_status(state, check_name)
+    state = override_status(state, check_name, invert=validate_bugfix_check)
 
     ch_helper = ClickHouseHelper()
     mark_flaky_tests(ch_helper, check_name, test_results)
@@ -275,10 +344,22 @@ if __name__ == "__main__":
         check_name_with_group,
     )
 
-    print(f"::notice ::Report url: {report_url}")
-    post_commit_status(
-        gh, pr_info.sha, check_name_with_group, description, state, report_url
-    )
+    print(f"::notice:: {check_name} Report url: {report_url}")
+    if args.post_commit_status == "commit_status":
+        post_commit_status(
+            gh, pr_info.sha, check_name_with_group, description, state, report_url
+        )
+    elif args.post_commit_status == "file":
+        post_commit_status_to_file(
+            post_commit_path,
+            description,
+            state,
+            report_url,
+        )
+    else:
+        raise Exception(
+            f'Unknown post_commit_status option "{args.post_commit_status}"'
+        )
 
     prepared_events = prepare_tests_results_for_clickhouse(
         pr_info,
@@ -289,10 +370,10 @@ if __name__ == "__main__":
         report_url,
         check_name_with_group,
     )
-    ch_helper.insert_events_into(db="gh-data", table="checks", events=prepared_events)
+    ch_helper.insert_events_into(db="default", table="checks", events=prepared_events)
 
     if state != "success":
-        if "force-tests" in pr_info.labels:
-            print("'force-tests' enabled, will report success")
+        if FORCE_TESTS_LABEL in pr_info.labels:
+            print(f"'{FORCE_TESTS_LABEL}' enabled, will report success")
         else:
             sys.exit(1)

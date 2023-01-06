@@ -1,6 +1,7 @@
 ---
-toc_priority: 20
-toc_title: New York Taxi Data
+slug: /zh/getting-started/example-datasets/nyc-taxi
+sidebar_position: 20
+sidebar_label: New York Taxi Data
 ---
 
 # 纽约出租车数据 {#niu-yue-shi-chu-zu-che-shu-ju}

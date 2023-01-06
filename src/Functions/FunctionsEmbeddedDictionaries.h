@@ -18,7 +18,7 @@
 #include <Common/typeid_cast.h>
 #include <Core/Defines.h>
 
-#include <Common/config.h>
+#include "config.h"
 
 
 namespace DB
@@ -33,7 +33,7 @@ namespace ErrorCodes
     extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 }
 
-/** Functions using Yandex.Metrica dictionaries
+/** Functions using deprecated dictionaries
   * - dictionaries of regions, operating systems, search engines.
   *
   * Climb up the tree to a certain level.
@@ -649,7 +649,7 @@ public:
             for (unsigned int region_id : region_ids)
             {
                 const StringRef & name_ref = dict.getRegionName(region_id, language);
-                col_to->insertDataWithTerminatingZero(name_ref.data, name_ref.size + 1);
+                col_to->insertData(name_ref.data, name_ref.size);
             }
 
             return col_to;

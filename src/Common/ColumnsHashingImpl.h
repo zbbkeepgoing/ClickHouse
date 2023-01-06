@@ -125,7 +125,7 @@ class FindResultImpl : public FindResultImplBase, public FindResultImplOffsetBas
 
 public:
     FindResultImpl()
-        : FindResultImplBase(false), FindResultImplOffsetBase<need_offset>(0)
+        : FindResultImplBase(false), FindResultImplOffsetBase<need_offset>(0) // NOLINT(clang-analyzer-optin.cplusplus.UninitializedObject)  intentionally allow uninitialized value here
     {}
 
     FindResultImpl(Mapped * value_, bool found_, size_t off)
@@ -212,9 +212,9 @@ protected:
         if constexpr (has_mapped)
             cached = &it->getMapped();
 
-        if (inserted)
+        if constexpr (has_mapped)
         {
-            if constexpr (has_mapped)
+            if (inserted)
             {
                 new (&it->getMapped()) Mapped();
             }
