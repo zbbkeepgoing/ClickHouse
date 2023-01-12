@@ -118,7 +118,7 @@ static void getFileReaderAndSchema(
     const FormatSettings & format_settings,
     std::atomic<int> & is_stopped)
 {
-    auto arrow_file = asArrowFile(in, format_settings, is_stopped);
+    auto arrow_file = asArrowFile(in, format_settings, is_stopped, "Parquet", PARQUET_MAGIC_BYTES);
     if (is_stopped)
         return;
     THROW_ARROW_NOT_OK(ch_parquet::arrow::OpenFile(std::move(arrow_file), arrow::default_memory_pool(), &file_reader));
@@ -201,18 +201,20 @@ void registerInputFormatParquet(FormatFactory & factory)
             {
                 return std::make_shared<OptimizedParquetBlockInputFormat>(buf, sample, settings);
             });
-    factory.markFormatAsColumnOriented("Parquet");
+    factory.markFormatSupportsSubcolumns("Parquet");
+    factory.markFormatSupportsSubsetOfColumns("Parquet");
 }
 
 void registerOptimizedParquetSchemaReader(FormatFactory & factory)
 {
     factory.registerSchemaReader(
         "Parquet",
-        [](ReadBuffer & buf, const FormatSettings & settings, ContextPtr)
-        {
-            return std::make_shared<OptimizedParquetSchemaReader>(buf, settings);
-        }
-        );
+        [](ReadBuffer & buf, const FormatSettings & settings) { return std::make_shared<OptimizedParquetSchemaReader>(buf, settings); });
+
+    factory.registerAdditionalInfoForSchemaCacheGetter(
+        "Parquet",
+        [](const FormatSettings & settings)
+        { return fmt::format("schema_inference_make_columns_nullable={}", settings.schema_inference_make_columns_nullable); });
 }
 
 }

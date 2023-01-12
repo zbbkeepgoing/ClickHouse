@@ -11,8 +11,8 @@ public:
         const std::string & key,
         jobject input,
         const DB::Names & key_names_,
-        DB::ASTTableJoin::Kind kind_,
-        DB::ASTTableJoin::Strictness strictness_,
+        DB::JoinKind kind_,
+        DB::JoinStrictness strictness_,
         const DB::ColumnsDescription & columns_);
 
     static void buildJoinIfNotExist(

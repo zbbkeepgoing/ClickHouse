@@ -22,7 +22,7 @@
 #include <substrait/plan.pb.h>
 
 #include <Poco/Logger.h>
-#include <base/logger_useful.h>
+#include <Common/logger_useful.h>
 #include <magic_enum.hpp>
 #include <Common/CHUtil.h>
 namespace DB
@@ -47,7 +47,7 @@ static DB::Block getRealHeader(const DB::Block & header)
 }
 
 SubstraitFileSource::SubstraitFileSource(DB::ContextPtr context_, const DB::Block & header_, const substrait::ReadRel::LocalFiles & file_infos)
-    : DB::SourceWithProgress(getRealHeader(header_), false)
+    : DB::ISource(getRealHeader(header_), false)
     , context(context_)
     , output_header(header_)
 {

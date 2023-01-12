@@ -87,7 +87,7 @@ public:
         std::vector<const ColumnString::Chars *> data(num_args);
         std::vector<const ColumnString::Offsets *> offsets(num_args);
         std::vector<size_t> fixed_string_sizes(num_args);
-        std::vector<String> constant_strings(num_args);
+        std::vector<std::optional<String>> constant_strings(num_args);
 
         bool has_column_string = false;
         bool has_column_fixed_string = false;
