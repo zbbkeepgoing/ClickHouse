@@ -52,7 +52,8 @@ add_library(${LOCALENGINE_SHARED_LIB} SHARED
         local_engine_jni.cpp)
 
 
-target_compile_options(${LOCALENGINE_SHARED_LIB} PUBLIC -fPIC)
+target_compile_options(${LOCALENGINE_SHARED_LIB} PUBLIC -fPIC
+        -Wno-shorten-64-to-32)
 
 target_link_libraries(${LOCALENGINE_SHARED_LIB} PUBLIC
         clickhouse_aggregate_functions
@@ -246,6 +247,7 @@ add_compile_options(-fPIC)
 if (ENABLE_JEMALLOC)
     target_compile_options(_jemalloc PRIVATE -fPIC)
 endif ()
+
 
 message(COMPILER_FLAGS ${COMPILER_FLAGS})
 message(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
