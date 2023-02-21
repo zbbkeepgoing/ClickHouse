@@ -390,13 +390,13 @@ void WindowRelParser::projectLeadLagDefaultValue(DB::QueryPlan & plan, const sub
     {
         auto if_null_function_builder = DB::FunctionFactory::instance().get(if_null_function_name, getContext());
         const auto * col_field = dag->getInputs()[col_index];
-        const auto * col_node = dag->tryFindInIndex(col_field->result_name);
+        const auto * col_node = dag->tryFindInOutputs(col_field->result_name);
         DB::ActionsDAG::NodeRawConstPtrs if_null_args;
         if_null_args.push_back(col_node);
         const auto * default_value_node = parseArgument(dag, default_value);
         if_null_args.push_back(default_value_node);
         const auto * if_null_function_node = &dag->addFunction(if_null_function_builder, if_null_args, col_name);
-        dag->addOrReplaceInIndex(*if_null_function_node);
+        dag->addOrReplaceInOutputs(*if_null_function_node);
     };
 
     for (size_t measure_index = 0, n = win_rel.measures().size(); measure_index < n; ++measure_index)
