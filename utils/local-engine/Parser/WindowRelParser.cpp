@@ -11,7 +11,7 @@
 #include <Parser/SortRelParser.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/WindowStep.h>
-#include <base/logger_useful.h>
+#include <Common/logger_useful.h>
 #include <base/sort.h>
 #include <google/protobuf/util/json_util.h>
 #include <Common/Exception.h>
@@ -136,15 +136,15 @@ DB::WindowFrame::FrameType WindowRelParser::parseWindowFrameType(const substrait
     auto function_name = parseFunctionName(window_function.function_reference());
     if (function_name && (*function_name == "rank" || *function_name == "dense_rank"))
     {
-        return DB::WindowFrame::FrameType::Range;
+        return DB::WindowFrame::FrameType::RANGE;
     }
     if (win_type == substrait::ROWS)
     {
-        return DB::WindowFrame::FrameType::Rows;
+        return DB::WindowFrame::FrameType::ROWS;
     }
     else if (win_type == substrait::RANGE)
     {
-        return DB::WindowFrame::FrameType::Range;
+        return DB::WindowFrame::FrameType::RANGE;
     }
     else
     {
@@ -284,10 +284,10 @@ String WindowRelParser::getWindowName(const substrait::WindowRel & win_rel, cons
     auto frame_type = parseWindowFrameType(window_function);
     switch (frame_type)
     {
-        case DB::WindowFrame::FrameType::Rows:
+        case DB::WindowFrame::FrameType::ROWS:
             frame_type_str = "Rows";
             break;
-        case DB::WindowFrame::FrameType::Range:
+        case DB::WindowFrame::FrameType::RANGE:
             frame_type_str = "Range";
             break;
         default:
@@ -354,7 +354,7 @@ void WindowRelParser::tryAddProjectionBeforeWindow(
                 // an exception of not found column(2) will throw.
                 const auto * node = parseArgument(actions_dag, arg);
                 names.push_back(node->result_name);
-                actions_dag->addOrReplaceInIndex(*node);
+                actions_dag->addOrReplaceInOutputs(*node);
                 need_project = true;
             }
             else
@@ -390,13 +390,13 @@ void WindowRelParser::projectLeadLagDefaultValue(DB::QueryPlan & plan, const sub
     {
         auto if_null_function_builder = DB::FunctionFactory::instance().get(if_null_function_name, getContext());
         const auto * col_field = dag->getInputs()[col_index];
-        const auto * col_node = dag->tryFindInIndex(col_field->result_name);
+        const auto * col_node = dag->tryFindInOutputs(col_field->result_name);
         DB::ActionsDAG::NodeRawConstPtrs if_null_args;
         if_null_args.push_back(col_node);
         const auto * default_value_node = parseArgument(dag, default_value);
         if_null_args.push_back(default_value_node);
         const auto * if_null_function_node = &dag->addFunction(if_null_function_builder, if_null_args, col_name);
-        dag->addOrReplaceInIndex(*if_null_function_node);
+        dag->addOrReplaceInOutputs(*if_null_function_node);
     };
 
     for (size_t measure_index = 0, n = win_rel.measures().size(); measure_index < n; ++measure_index)
