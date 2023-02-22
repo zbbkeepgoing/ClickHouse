@@ -8,8 +8,6 @@
 #include <Common/Exception.h>
 #include <Core/Defines.h>
 
-#include <base/arithmeticOverflow.h>
-
 
 namespace ProfileEvents
 {
@@ -21,11 +19,6 @@ namespace ProfileEvents
 namespace DB
 {
 
-namespace ErrorCodes
-{
-    extern const int ARGUMENT_OUT_OF_BOUND;
-}
-
 
 /** Replacement for std::vector<char> to use in buffers.
   * Differs in that is doesn't do unneeded memset. (And also tries to do as little as possible.)
@@ -34,7 +27,8 @@ namespace ErrorCodes
 template <typename Allocator = Allocator<false>>
 struct Memory : boost::noncopyable, Allocator
 {
-    static constexpr size_t pad_right = PADDING_FOR_SIMD - 1;
+    /// Padding is needed to allow usage of 'memcpySmallAllowReadWriteOverflow15' function with this buffer.
+    static constexpr size_t pad_right = 15;
 
     size_t m_capacity = 0;  /// With padding.
     size_t m_size = 0;
@@ -44,9 +38,9 @@ struct Memory : boost::noncopyable, Allocator
     Memory() = default;
 
     /// If alignment != 0, then allocate memory aligned to specified value.
-    explicit Memory(size_t size_, size_t alignment_ = 0) : alignment(alignment_)
+    explicit Memory(size_t size_, size_t alignment_ = 0) : m_capacity(size_), m_size(m_capacity), alignment(alignment_)
     {
-        alloc(size_);
+        alloc();
     }
 
     ~Memory()
@@ -81,55 +75,57 @@ struct Memory : boost::noncopyable, Allocator
 
     void resize(size_t new_size)
     {
-        if (!m_data)
+        if (0 == m_capacity)
         {
-            alloc(new_size);
-            return;
+            m_size = new_size;
+            m_capacity = new_size;
+            alloc();
         }
-
-        if (new_size <= m_capacity - pad_right)
+        else if (new_size <= m_capacity - pad_right)
         {
             m_size = new_size;
             return;
         }
+        else
+        {
+            size_t new_capacity = align(new_size, alignment) + pad_right;
 
-        size_t new_capacity = withPadding(new_size);
+            size_t diff = new_capacity - m_capacity;
+            ProfileEvents::increment(ProfileEvents::IOBufferAllocBytes, diff);
 
-        size_t diff = new_capacity - m_capacity;
-        ProfileEvents::increment(ProfileEvents::IOBufferAllocBytes, diff);
-
-        m_data = static_cast<char *>(Allocator::realloc(m_data, m_capacity, new_capacity, alignment));
-        m_capacity = new_capacity;
-        m_size = new_size;
+            m_data = static_cast<char *>(Allocator::realloc(m_data, m_capacity, new_capacity, alignment));
+            m_capacity = new_capacity;
+            m_size = m_capacity - pad_right;
+        }
     }
 
 private:
-    static size_t withPadding(size_t value)
+    static size_t align(const size_t value, const size_t alignment)
     {
-        size_t res = 0;
+        if (!alignment)
+            return value;
 
-        if (common::addOverflow<size_t>(value, pad_right, res))
-            throw Exception(ErrorCodes::ARGUMENT_OUT_OF_BOUND, "value is too big to apply padding");
+        if (!(value % alignment))
+            return value;
 
-        return res;
+        return (value + alignment - 1) / alignment * alignment;
     }
 
-    void alloc(size_t new_size)
+    void alloc()
     {
-        if (!new_size)
+        if (!m_capacity)
         {
             m_data = nullptr;
             return;
         }
 
-        size_t new_capacity = withPadding(new_size);
-
         ProfileEvents::increment(ProfileEvents::IOBufferAllocs);
-        ProfileEvents::increment(ProfileEvents::IOBufferAllocBytes, new_capacity);
+        ProfileEvents::increment(ProfileEvents::IOBufferAllocBytes, m_capacity);
 
+        size_t new_capacity = align(m_capacity, alignment) + pad_right;
         m_data = static_cast<char *>(Allocator::alloc(new_capacity, alignment));
         m_capacity = new_capacity;
-        m_size = new_size;
+        m_size = m_capacity - pad_right;
     }
 
     void dealloc()
@@ -185,7 +181,7 @@ public:
     }
 
 private:
-    void nextImpl() final
+    void nextImpl() override final
     {
         const size_t prev_size = Base::position() - memory.data();
         memory.resize(2 * prev_size + 1);

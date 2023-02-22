@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <Storages/SubstraitSource/FormatFile.h>
 #include <unordered_map>
 #include <Columns/IColumn.h>
 #include <Core/Block.h>
@@ -11,6 +10,7 @@
 #include <Interpreters/Context_fwd.h>
 #include <Processors/Chunk.h>
 #include <Processors/Executors/PullingPipelineExecutor.h>
+#include <Processors/Sources/SourceWithProgress.h>
 #include <QueryPipeline/QueryPipeline.h>
 #include <Storages/SubstraitSource/FormatFile.h>
 #include <Storages/SubstraitSource/ReadBufferBuilder.h>
@@ -70,7 +70,7 @@ private:
     size_t block_size;
 };
 
-class SubstraitFileSource : public DB::ISource
+class SubstraitFileSource : public DB::SourceWithProgress
 {
 public:
     SubstraitFileSource(DB::ContextPtr context_, const DB::Block & header_, const substrait::ReadRel::LocalFiles & file_infos);

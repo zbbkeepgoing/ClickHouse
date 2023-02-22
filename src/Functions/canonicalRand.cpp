@@ -34,7 +34,7 @@ private:
 
 struct NameCanonicalRand
 {
-    static constexpr auto name = "randCanonical";
+    static constexpr auto name = "canonicalRand";
 };
 
 class FunctionCanonicalRand : public FunctionRandomImpl<CanonicalRandImpl, Float64, NameCanonicalRand>
@@ -45,15 +45,9 @@ public:
 
 }
 
-REGISTER_FUNCTION(CanonicalRand)
+void registerFunctionCanonicalRand(FunctionFactory & factory)
 {
-    factory.registerFunction<FunctionCanonicalRand>({
-        R"(
-The function generates pseudo random results with independent and identically distributed uniformly distributed values in [0, 1).
-Non-deterministic. Return type is Float64.
-        )",
-        Documentation::Examples{{"randCanonical", "SELECT randCanonical()"}},
-        Documentation::Categories{"Mathematical"}});
+    factory.registerFunction<FunctionCanonicalRand>();
 }
 
 }

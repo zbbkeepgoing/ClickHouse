@@ -313,7 +313,7 @@ public:
                 ErrorCodes::UNKNOWN_TYPE, "SparkRowReader::getStringRef doesn't support type {}", field_types[ordinal]->getName());
 
         if (isNullAt(ordinal))
-            return StringRef();
+            return EMPTY_STRING_REF;
 
         const auto & fixed_length_data_reader = fixed_length_data_readers[ordinal];
         const auto & variable_length_data_reader = variable_length_data_readers[ordinal];

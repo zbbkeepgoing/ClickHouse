@@ -26,8 +26,8 @@ struct StorageJoinContext
     jobject input;
     size_t io_buffer_size;
     DB::Names key_names;
-    DB::JoinKind kind;
-    DB::JoinStrictness strictness;
+    DB::ASTTableJoin::Kind kind;
+    DB::ASTTableJoin::Strictness strictness;
     DB::ColumnsDescription columns;
 };
 
@@ -36,8 +36,8 @@ void BroadCastJoinBuilder::buildJoinIfNotExist(
     jobject input,
     size_t io_buffer_size,
     const DB::Names & key_names_,
-    DB::JoinKind kind_,
-    DB::JoinStrictness strictness_,
+    DB::ASTTableJoin::Kind kind_,
+    DB::ASTTableJoin::Strictness strictness_,
     const DB::ColumnsDescription & columns_)
 {
     if (!storage_join_map.contains(key))
@@ -104,27 +104,27 @@ std::shared_ptr<StorageJoinFromReadBuffer> BroadCastJoinBuilder::getJoin(const s
     {
         key_names.emplace_back(key_name);
     }
-    DB::JoinKind kind;
-    DB::JoinStrictness strictness;
+    DB::ASTTableJoin::Kind kind;
+    DB::ASTTableJoin::Strictness strictness;
     if (join_type == "Inner")
     {
-        kind = DB::JoinKind::Inner;
-        strictness = DB::JoinStrictness::All;
+        kind = DB::ASTTableJoin::Kind::Inner;
+        strictness = DB::ASTTableJoin::Strictness::All;
     }
     else if (join_type == "Semi")
     {
-        kind = DB::JoinKind::Left;
-        strictness = DB::JoinStrictness::Semi;
+        kind = DB::ASTTableJoin::Kind::Left;
+        strictness = DB::ASTTableJoin::Strictness::Semi;
     }
     else if (join_type == "Anti")
     {
-        kind = DB::JoinKind::Left;
-        strictness = DB::JoinStrictness::Anti;
+        kind = DB::ASTTableJoin::Kind::Left;
+        strictness = DB::ASTTableJoin::Strictness::Anti;
     }
     else if (join_type == "Left")
     {
-        kind = DB::JoinKind::Left;
-        strictness = DB::JoinStrictness::All;
+        kind = DB::ASTTableJoin::Kind::Left;
+        strictness = DB::ASTTableJoin::Strictness::All;
     }
     else
     {

@@ -13,18 +13,9 @@ node = cluster.add_instance(
         "configs/second.key",
         "configs/ECcert.crt",
         "configs/ECcert.key",
-        "configs/WithPassPhrase.crt",
-        "configs/WithPassPhrase.key",
         "configs/cert.xml",
     ],
 )
-PASS_PHRASE_TEMPLATE = """<privateKeyPassphraseHandler>
-                <name>KeyFileHandler</name>
-                <options>
-                <password>{pass_phrase}</password>
-                </options>
-            </privateKeyPassphraseHandler>
-"""
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -36,7 +27,7 @@ def started_cluster():
         cluster.shutdown()
 
 
-def change_config_to_key(name, pass_phrase=""):
+def change_config_to_key(name):
     """
     * Generate config with certificate/key name from args.
     * Reload config.
@@ -46,6 +37,7 @@ def change_config_to_key(name, pass_phrase=""):
             "bash",
             "-c",
             """cat > /etc/clickhouse-server/config.d/cert.xml << EOF
+<?xml version="1.0"?>
 <clickhouse>
     <https_port>8443</https_port>
     <openSSL>
@@ -56,23 +48,21 @@ def change_config_to_key(name, pass_phrase=""):
             <cacheSessions>true</cacheSessions>
             <disableProtocols>sslv2,sslv3</disableProtocols>
             <preferServerCiphers>true</preferServerCiphers>
-            {pass_phrase}
         </server>
     </openSSL>
 </clickhouse>
 EOF""".format(
-                cur_name=name, pass_phrase=pass_phrase
+                cur_name=name
             ),
         ]
     )
     node.query("SYSTEM RELOAD CONFIG")
 
 
-def check_certificate_switch(
-    first, second, pass_phrase_first="", pass_phrase_second=""
-):
+def test_first_than_second_cert():
+    """Consistently set first key and check that only it will be accepted, then repeat same for second key."""
     # Set first key
-    change_config_to_key(first, pass_phrase_first)
+    change_config_to_key("first")
 
     # Command with correct certificate
     assert (
@@ -81,7 +71,9 @@ def check_certificate_switch(
                 "curl",
                 "--silent",
                 "--cacert",
-                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(cur_name=first),
+                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
+                    cur_name="first"
+                ),
                 "https://localhost:8443/",
             ]
         )
@@ -98,7 +90,7 @@ def check_certificate_switch(
                 "--silent",
                 "--cacert",
                 "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
-                    cur_name=second
+                    cur_name="second"
                 ),
                 "https://localhost:8443/",
             ]
@@ -108,7 +100,7 @@ def check_certificate_switch(
         assert True
 
     # Change to other key
-    change_config_to_key(second, pass_phrase_second)
+    change_config_to_key("second")
 
     # Command with correct certificate
     assert (
@@ -118,7 +110,7 @@ def check_certificate_switch(
                 "--silent",
                 "--cacert",
                 "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
-                    cur_name=second
+                    cur_name="second"
                 ),
                 "https://localhost:8443/",
             ]
@@ -134,7 +126,9 @@ def check_certificate_switch(
                 "curl",
                 "--silent",
                 "--cacert",
-                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(cur_name=first),
+                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
+                    cur_name="first"
+                ),
                 "https://localhost:8443/",
             ]
         )
@@ -143,18 +137,59 @@ def check_certificate_switch(
         assert True
 
 
-def test_first_than_second_cert():
-    """Consistently set first key and check that only it will be accepted, then repeat same for second key."""
-    check_certificate_switch("first", "second")
-
-
 def test_ECcert_reload():
-    """Check EC certificate"""
-    check_certificate_switch("first", "ECcert")
+    # Set first key
+    change_config_to_key("first")
 
-
-def test_cert_with_pass_phrase():
-    pass_phrase_for_cert = PASS_PHRASE_TEMPLATE.format(pass_phrase="test")
-    check_certificate_switch(
-        "first", "WithPassPhrase", pass_phrase_second=pass_phrase_for_cert
+    # Command with correct certificate
+    assert (
+        node.exec_in_container(
+            [
+                "curl",
+                "--silent",
+                "--cacert",
+                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
+                    cur_name="first"
+                ),
+                "https://localhost:8443/",
+            ]
+        )
+        == "Ok.\n"
     )
+
+    # Change to other key
+    change_config_to_key("ECcert")
+
+    # Command with correct certificate
+    assert (
+        node.exec_in_container(
+            [
+                "curl",
+                "--silent",
+                "--cacert",
+                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
+                    cur_name="ECcert"
+                ),
+                "https://localhost:8443/",
+            ]
+        )
+        == "Ok.\n"
+    )
+
+    # Command with wrong certificate
+    # Same as previous
+    try:
+        node.exec_in_container(
+            [
+                "curl",
+                "--silent",
+                "--cacert",
+                "/etc/clickhouse-server/config.d/{cur_name}.crt".format(
+                    cur_name="first"
+                ),
+                "https://localhost:8443/",
+            ]
+        )
+        assert False
+    except:
+        assert True

@@ -25,8 +25,8 @@ public:
     static void checkArguments(const DataTypes & arguments)
     {
         if (!isString(arguments[0]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of first argument of function {}. "
-            "Must be String.", arguments[0]->getName(), getName());
+            throw Exception("Illegal type " + arguments[0]->getName() + " of first argument of function " + getName() + ". Must be String.",
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
     }
 
     /// Returns the position of the argument that is the column of rows
@@ -96,7 +96,7 @@ public:
 struct NameExtractURLParameterNames { static constexpr auto name = "extractURLParameterNames"; };
 using FunctionExtractURLParameterNames = FunctionTokens<ExtractURLParameterNamesImpl>;
 
-REGISTER_FUNCTION(ExtractURLParameterNames)
+void registerFunctionExtractURLParameterNames(FunctionFactory & factory)
 {
     factory.registerFunction<FunctionExtractURLParameterNames>();
 }

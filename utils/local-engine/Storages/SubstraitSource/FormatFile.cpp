@@ -8,7 +8,8 @@
 #include <Poco/URI.h>
 #include <Common/Exception.h>
 #include <Common/StringUtils.h>
-#include <Common/logger_useful.h>
+#include <Common/config.h>
+#include "base/logger_useful.h"
 #include <IO/ReadBufferFromFile.h>
 #include <Processors/Formats/IInputFormat.h>
 #include <Storages/HDFS/ReadBufferFromHDFS.h>
@@ -16,7 +17,7 @@
 #include <Storages/SubstraitSource/OrcFormatFile.h>
 
 #include <Poco/Logger.h>
-#include <Common/logger_useful.h>
+#include <base/logger_useful.h>
 
 namespace DB
 {

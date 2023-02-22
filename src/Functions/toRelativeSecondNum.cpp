@@ -9,7 +9,7 @@ namespace DB
 
 using FunctionToRelativeSecondNum = FunctionDateOrDateTimeToSomething<DataTypeUInt32, ToRelativeSecondNumImpl<ResultPrecision::Standard>>;
 
-REGISTER_FUNCTION(ToRelativeSecondNum)
+void registerFunctionToRelativeSecondNum(FunctionFactory & factory)
 {
     factory.registerFunction<FunctionToRelativeSecondNum>();
 }
