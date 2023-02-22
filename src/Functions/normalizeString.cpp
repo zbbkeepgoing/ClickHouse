@@ -1,4 +1,4 @@
-#include "config.h"
+#include "config_core.h"
 
 #if USE_ICU
 #include <Functions/FunctionFactory.h>
@@ -8,7 +8,7 @@
 #include <unicode/unorm2.h>
 #include <unicode/ustring.h>
 #include <unicode/utypes.h>
-#include <Common/logger_useful.h>
+#include <base/logger_useful.h>
 #include <Columns/ColumnString.h>
 #include <Parsers/IAST_fwd.h>
 
@@ -95,8 +95,6 @@ struct NormalizeUTF8Impl
         size_t size = offsets.size();
         res_offsets.resize(size);
 
-        res_data.reserve(data.size() * 2);
-
         ColumnString::Offset current_from_offset = 0;
         ColumnString::Offset current_to_offset = 0;
 
@@ -108,7 +106,7 @@ struct NormalizeUTF8Impl
             size_t from_size = offsets[i] - current_from_offset - 1;
 
             from_uchars.resize(from_size + 1);
-            int32_t from_code_points = 0;
+            int32_t from_code_points;
             u_strFromUTF8(
                 from_uchars.data(),
                 from_uchars.size(),
@@ -135,7 +133,7 @@ struct NormalizeUTF8Impl
             if (res_data.size() < max_to_size)
                 res_data.resize(max_to_size);
 
-            int32_t to_size = 0;
+            int32_t to_size;
             u_strToUTF8(
                 reinterpret_cast<char*>(&res_data[current_to_offset]),
                 res_data.size() - current_to_offset,
@@ -153,13 +151,11 @@ struct NormalizeUTF8Impl
 
             current_from_offset = offsets[i];
         }
-
-        res_data.resize(current_to_offset);
     }
 
     [[noreturn]] static void vectorFixed(const ColumnString::Chars &, size_t, ColumnString::Chars &)
     {
-        throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Cannot apply function normalizeUTF8 to fixed string.");
+        throw Exception("Cannot apply function normalizeUTF8 to fixed string.", ErrorCodes::ILLEGAL_COLUMN);
     }
 };
 
@@ -169,7 +165,7 @@ using FunctionNormalizeUTF8NFKC = FunctionStringToString<NormalizeUTF8Impl<Norma
 using FunctionNormalizeUTF8NFKD = FunctionStringToString<NormalizeUTF8Impl<NormalizeNFKDImpl>, NormalizeNFKDImpl>;
 }
 
-REGISTER_FUNCTION(NormalizeUTF8)
+void registerFunctionNormalizeUTF8(FunctionFactory & factory)
 {
     factory.registerFunction<FunctionNormalizeUTF8NFC>();
     factory.registerFunction<FunctionNormalizeUTF8NFD>();

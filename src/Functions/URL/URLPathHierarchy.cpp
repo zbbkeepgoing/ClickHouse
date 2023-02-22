@@ -25,8 +25,8 @@ public:
     static void checkArguments(const DataTypes & arguments)
     {
         if (!isString(arguments[0]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of first argument of function {}. "
-            "Must be String.", arguments[0]->getName(), getName());
+            throw Exception("Illegal type " + arguments[0]->getName() + " of first argument of function " + getName() + ". Must be String.",
+            ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
     }
 
     void init(const ColumnsWithTypeAndName & /*arguments*/) {}
@@ -112,7 +112,7 @@ public:
 struct NameURLHierarchy { static constexpr auto name = "URLHierarchy"; };
 using FunctionURLHierarchy = FunctionTokens<URLHierarchyImpl>;
 
-REGISTER_FUNCTION(URLHierarchy)
+void registerFunctionURLHierarchy(FunctionFactory & factory)
 {
     factory.registerFunction<FunctionURLHierarchy>();
 }

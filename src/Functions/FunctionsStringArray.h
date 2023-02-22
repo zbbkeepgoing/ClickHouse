@@ -81,8 +81,8 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} takes one or two arguments", getName());
 
         if (!isString(arguments[0]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of first argument of function {}. "
-                "Must be String.", arguments[0]->getName(), getName());
+            throw Exception("Illegal type " + arguments[0]->getName() + " of first argument of function " + getName() + ". Must be String.",
+                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
     }
 
     /// Initialize by the function arguments.
@@ -149,8 +149,8 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} takes one or two arguments", getName());
 
         if (!isString(arguments[0]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of first argument of function {}. "
-                "Must be String.", arguments[0]->getName(), getName());
+            throw Exception("Illegal type " + arguments[0]->getName() + " of first argument of function " + getName() + ". Must be String.",
+                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
     }
 
     /// Initialize by the function arguments.
@@ -217,8 +217,8 @@ public:
             throw Exception(ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH, "Function {} takes one or two arguments", getName());
 
         if (!isString(arguments[0]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of first argument of function {}. "
-                "Must be String.", arguments[0]->getName(), getName());
+            throw Exception("Illegal type " + arguments[0]->getName() + " of first argument of function " + getName() + ". Must be String.",
+                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
     }
 
     /// Initialize by the function arguments.
@@ -283,15 +283,15 @@ public:
             throw Exception(
                 ErrorCodes::NUMBER_OF_ARGUMENTS_DOESNT_MATCH,
                 "Function '{}' needs at least 2 arguments, at most 3 arguments; passed {}.",
-                name, arguments.size());
+                arguments.size());
 
         if (!isString(arguments[0]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of first argument of function {}. "
-                "Must be String.", arguments[0]->getName(), getName());
+            throw Exception("Illegal type " + arguments[0]->getName() + " of first argument of function " + getName() + ". Must be String.",
+                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
 
         if (!isString(arguments[1]))
-            throw Exception(ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT, "Illegal type {} of second argument of function {}. "
-                "Must be String.", arguments[1]->getName(), getName());
+            throw Exception("Illegal type " + arguments[1]->getName() + " of second argument of function " + getName() + ". Must be String.",
+                ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
     }
 
     void init(const ColumnsWithTypeAndName & arguments)
@@ -299,13 +299,14 @@ public:
         const ColumnConst * col = checkAndGetColumnConstStringOrFixedString(arguments[0].column.get());
 
         if (!col)
-            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Illegal column {} of first argument of function {}. "
-                "Must be constant string.", arguments[0].column->getName(), getName());
+            throw Exception("Illegal column " + arguments[0].column->getName()
+                + " of first argument of function " + getName() + ". Must be constant string.",
+                ErrorCodes::ILLEGAL_COLUMN);
 
         String sep_str = col->getValue<String>();
 
         if (sep_str.size() != 1)
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "Illegal separator for function {}. Must be exactly one byte.", getName());
+            throw Exception("Illegal separator for function " + getName() + ". Must be exactly one byte.", ErrorCodes::BAD_ARGUMENTS);
 
         sep = sep_str[0];
     }
@@ -373,8 +374,9 @@ public:
         const ColumnConst * col = checkAndGetColumnConstStringOrFixedString(arguments[0].column.get());
 
         if (!col)
-            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Illegal column {} of first argument of function {}. "
-                "Must be constant string.", arguments[0].column->getName(), getName());
+            throw Exception("Illegal column " + arguments[0].column->getName()
+                + " of first argument of function " + getName() + ". Must be constant string.",
+                ErrorCodes::ILLEGAL_COLUMN);
 
         sep = col->getValue<String>();
     }
@@ -435,7 +437,7 @@ public:
 class SplitByRegexpImpl
 {
 private:
-    Regexps::RegexpPtr re;
+    Regexps::Pool::Pointer re;
     OptimizedRegularExpression::MatchVec matches;
 
     Pos pos;
@@ -460,11 +462,12 @@ public:
         const ColumnConst * col = checkAndGetColumnConstStringOrFixedString(arguments[0].column.get());
 
         if (!col)
-            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Illegal column {} of first argument of function {}. "
-                            "Must be constant string.", arguments[0].column->getName(), getName());
+            throw Exception("Illegal column " + arguments[0].column->getName()
+                            + " of first argument of function " + getName() + ". Must be constant string.",
+                            ErrorCodes::ILLEGAL_COLUMN);
 
         if (!col->getValue<String>().empty())
-            re = std::make_shared<Regexps::Regexp>(Regexps::createRegexp<false, false, false>(col->getValue<String>()));
+            re = Regexps::get<false, false>(col->getValue<String>());
     }
 
     /// Returns the position of the argument that is the column of strings
@@ -524,7 +527,7 @@ public:
 class ExtractAllImpl
 {
 private:
-    Regexps::RegexpPtr re;
+    Regexps::Pool::Pointer re;
     OptimizedRegularExpression::MatchVec matches;
     size_t capture;
 
@@ -548,10 +551,11 @@ public:
         const ColumnConst * col = checkAndGetColumnConstStringOrFixedString(arguments[1].column.get());
 
         if (!col)
-            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Illegal column {} of first argument of function {}. "
-                "Must be constant string.", arguments[1].column->getName(), getName());
+            throw Exception("Illegal column " + arguments[1].column->getName()
+                + " of first argument of function " + getName() + ". Must be constant string.",
+                ErrorCodes::ILLEGAL_COLUMN);
 
-        re = std::make_shared<Regexps::Regexp>(Regexps::createRegexp<false, false, false>(col->getValue<String>()));
+        re = Regexps::get<false, false>(col->getValue<String>());
         capture = re->getNumberOfSubpatterns() > 0 ? 1 : 0;
 
         matches.resize(capture + 1);
@@ -716,8 +720,10 @@ public:
             return result_type->createColumnConst(col_const_str->size(), dst);
         }
         else
-            throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Illegal columns {}, {} of arguments of function {}",
-                    array_argument.column->getName(), array_argument.column->getName(), getName());
+            throw Exception("Illegal columns " + array_argument.column->getName()
+                    + ", " + array_argument.column->getName()
+                    + " of arguments of function " + getName(),
+                ErrorCodes::ILLEGAL_COLUMN);
     }
 
 private:
@@ -890,7 +896,7 @@ public:
         {
             const ColumnConst * col_delim = checkAndGetColumnConstStringOrFixedString(arguments[1].column.get());
             if (!col_delim)
-                throw Exception(ErrorCodes::ILLEGAL_COLUMN, "Second argument for function {} must be constant string.", getName());
+                throw Exception("Second argument for function " + getName() + " must be constant string.", ErrorCodes::ILLEGAL_COLUMN);
 
             delimiter = col_delim->getValue<String>();
         }

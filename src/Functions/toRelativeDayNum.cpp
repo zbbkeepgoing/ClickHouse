@@ -9,7 +9,7 @@ namespace DB
 
 using FunctionToRelativeDayNum = FunctionDateOrDateTimeToSomething<DataTypeUInt32, ToRelativeDayNumImpl<ResultPrecision::Standard>>;
 
-REGISTER_FUNCTION(ToRelativeDayNum)
+void registerFunctionToRelativeDayNum(FunctionFactory & factory)
 {
     factory.registerFunction<FunctionToRelativeDayNum>();
 }

@@ -10,6 +10,7 @@
 #include <Processors/QueryPlan/AggregatingStep.h>
 #include <Processors/QueryPlan/ISourceStep.h>
 #include <Processors/QueryPlan/QueryPlan.h>
+#include <Processors/Sources/SourceWithProgress.h>
 #include <QueryPipeline/Pipe.h>
 #include <Storages/CustomStorageMergeTree.h>
 #include <Storages/IStorage.h>
@@ -96,7 +97,7 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     {"shiftright", "bitShiftRight"},
     {"check_overflow", "check_overflow"},
     {"factorial", "factorial"},
-    {"rand", "randCanonical"},
+    {"rand", "canonicalRand"},
 
     /// string functions
     {"like", "like"},
@@ -277,11 +278,12 @@ private:
     void wrapNullable(std::vector<String> columns, ActionsDAGPtr actionsDag,
                       std::map<std::string, std::string>& nullable_measure_names);
 
-    static Aggregator::Params getAggregateParam(const Names & keys,
+    static Aggregator::Params getAggregateParam(const Block & header, const ColumnNumbers & keys,
                                                 const AggregateDescriptions & aggregates)
     {
         Settings settings;
         return Aggregator::Params(
+            header,
             keys,
             aggregates,
             false,
@@ -295,17 +297,14 @@ private:
             settings.max_threads,
             settings.min_free_disk_space_for_temporary_data,
             true,
-            3,
-            settings.max_block_size,
-            false,
-            false);
+            3);
     }
 
     static Aggregator::Params
-    getMergedAggregateParam(const Names & keys, const AggregateDescriptions & aggregates)
+    getMergedAggregateParam(const Block & header, const ColumnNumbers & keys, const AggregateDescriptions & aggregates)
     {
         Settings settings;
-        return Aggregator::Params(keys, aggregates, false, settings.max_threads, settings.max_block_size);
+        return Aggregator::Params(header, keys, aggregates, false, settings.max_threads);
     }
 
     void addRemoveNullableStep(QueryPlan & plan, std::vector<String> columns);

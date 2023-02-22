@@ -264,8 +264,7 @@ SparkRowInfo::SparkRowInfo(const Block & block)
         {
             if (BackingDataLengthCalculator::isDataTypeSupportRawData(type_without_nullable))
             {
-                auto column = col.column->convertToFullColumnIfConst();
-                const auto * nullable_column = checkAndGetColumn<ColumnNullable>(*column);
+                const auto * nullable_column = checkAndGetColumn<ColumnNullable>(*col.column);
                 if (nullable_column)
                 {
                     const auto & nested_column = nullable_column->getNestedColumn();
@@ -615,7 +614,7 @@ int64_t VariableLengthDataWriter::writeArray(size_t row_idx, const DB::Array & a
                 bitSet(buffer_address + offset + start + 8, i);
             else
                 // writer.write(elem, buffer_address + offset + start + 8 + len_null_bitmap + i * elem_size);
-                writer.unsafeWrite(reinterpret_cast<char*>(&elem.safeGet<char>()), buffer_address + offset + start + 8 + len_null_bitmap + i * elem_size);
+                writer.unsafeWrite(&elem.reinterpret<char>(), buffer_address + offset + start + 8 + len_null_bitmap + i * elem_size);
         }
     }
     else
@@ -719,7 +718,7 @@ int64_t VariableLengthDataWriter::writeStruct(size_t row_idx, const DB::Tuple & 
         {
             FixedLengthDataWriter writer(field_type);
             // writer.write(field_value, buffer_address + offset + start + len_null_bitmap + i * 8);
-            writer.unsafeWrite(reinterpret_cast<char*>(&field_value.safeGet<char>()), buffer_address + offset + start + len_null_bitmap + i * 8);
+            writer.unsafeWrite(&field_value.reinterpret<char>(), buffer_address + offset + start + len_null_bitmap + i * 8);
         }
         else
         {
@@ -746,7 +745,7 @@ int64_t VariableLengthDataWriter::write(size_t row_idx, const DB::Field & field,
 
     if (which.isDecimal128())
     {
-        const auto & decimal_field = field.safeGet<DecimalField<Decimal128>>();
+        const auto & decimal_field = field.reinterpret<DecimalField<Decimal128>>();
         auto decimal128 = decimal_field.getValue();
         BackingDataLengthCalculator::swapBytes(decimal128);
         return writeUnalignedBytes(row_idx, reinterpret_cast<const char *>(&decimal128), sizeof(Decimal128), parent_offset);
