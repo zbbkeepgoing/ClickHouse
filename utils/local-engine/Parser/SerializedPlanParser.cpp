@@ -1379,6 +1379,17 @@ void SerializedPlanParser::parseFunctionArguments(
             parsed_args.push_back(index_node);
 
     }
+    else if (function_name == "repeat")
+    {
+        // repeat. the field index must be unsigned integer in CH, cast the signed integer in substrait
+        // which must be a positive value into unsigned integer here.
+        parseFunctionArgument(actions_dag, parsed_args, required_columns, function_name, args[0]);
+        const DB::ActionsDAG::Node * repeat_times_node =
+            parseFunctionArgument(actions_dag, required_columns, function_name, args[1]);
+        DB::DataTypeNullable target_type(std::make_shared<DB::DataTypeUInt32>());
+        repeat_times_node = ActionsDAGUtil::convertNodeType(actions_dag, repeat_times_node, target_type.getName());
+        parsed_args.emplace_back(repeat_times_node);
+    }
     else
     {
         // Default handle
