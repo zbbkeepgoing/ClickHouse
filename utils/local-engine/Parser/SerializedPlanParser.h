@@ -131,6 +131,10 @@ static const std::map<std::string, std::string> SCALAR_FUNCTIONS = {
     {"translate", "translateUTF8"},
     {"repeat","repeat"},
 
+    /// hash functions
+    {"hash", "murmurHashSpark3_32"},
+    {"xxhash64", "xxHashSpark64"},
+
     // in functions
     {"in", "in"},
 
