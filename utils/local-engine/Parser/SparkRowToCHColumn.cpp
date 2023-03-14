@@ -46,12 +46,7 @@ ALWAYS_INLINE static void writeRowToColumns(std::vector<MutableColumnPtr> & colu
             else if (!spark_row_reader.isBigEndianInSparkRow(i))
                 columns[i]->insertData(str_ref.data, str_ref.size);
             else
-            {
-                String str(str_ref.data, str_ref.size);
-                auto * decimal128 = reinterpret_cast<Decimal128 *>(str.data());
-                BackingDataLengthCalculator::swapBytes(*decimal128);
-                columns[i]->insertData(str.data(), str.size());
-            }
+                columns[i]->insert(spark_row_reader.getField(i)); // read decimal128
         }
         else
             columns[i]->insert(spark_row_reader.getField(i));
@@ -150,14 +145,16 @@ StringRef VariableLengthDataReader::readUnalignedBytes(const char * buffer, size
 
 Field VariableLengthDataReader::readDecimal(const char * buffer, size_t length) const
 {
-    assert(sizeof(Decimal128) == length);
+    assert(sizeof(Decimal128) <= length);
 
-    Decimal128 value;
-    memcpy(&value, buffer, length);
-    BackingDataLengthCalculator::swapBytes(value);
+    char decimal128_fix_data[sizeof(Decimal128)] = {};
+    memcpy(decimal128_fix_data + sizeof(Decimal128) - length, buffer, length); // padding
+    String buf(decimal128_fix_data, sizeof(Decimal128));
+    BackingDataLengthCalculator::swapDecimalEndianBytes(buf); // Big-endian to Little-endian
 
+    auto * decimal128 = reinterpret_cast<Decimal128 *>(buf.data());
     const auto * decimal128_type = typeid_cast<const DataTypeDecimal128 *>(type_without_nullable.get());
-    return std::move(DecimalField<Decimal128>(std::move(value), decimal128_type->getScale()));
+    return std::move(DecimalField<Decimal128>(std::move(*decimal128), decimal128_type->getScale()));
 }
 
 Field VariableLengthDataReader::readString(const char * buffer, size_t length) const
