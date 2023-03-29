@@ -25,33 +25,17 @@
 #include <Common/ExceptionUtils.h>
 #include <Common/JNIUtils.h>
 #include <Common/QueryContext.h>
-
+#include <Common/CHUtil.h>
 
 #ifdef __cplusplus
-std::vector<std::string> stringSplit(const std::string & str, char delim)
-{
-    try
-    {
-        std::string s;
-        s.append(1, delim);
 
-        std::regex reg(s);
-        std::vector<std::string> elems(std::sregex_token_iterator(str.begin(), str.end(), reg, -1), std::sregex_token_iterator());
-        return elems;
-    }
-    catch (DB::Exception & e)
-    {
-        local_engine::ExceptionUtils::handleException(e);
-    }
-}
-
-DB::ColumnWithTypeAndName inline getColumnFromColumnVector(JNIEnv * /*env*/, jobject  /*obj*/, jlong block_address, jint column_position)
+static DB::ColumnWithTypeAndName getColumnFromColumnVector(JNIEnv * /*env*/, jobject  /*obj*/, jlong block_address, jint column_position)
 {
     DB::Block * block = reinterpret_cast<DB::Block *>(block_address);
     return block->getByPosition(column_position);
 }
 
-std::string jstring2string(JNIEnv * env, jstring jStr)
+static std::string jstring2string(JNIEnv * env, jstring jStr)
 {
     try
     {
@@ -81,9 +65,6 @@ std::string jstring2string(JNIEnv * env, jstring jStr)
 extern "C" {
 #endif
 
-
-extern void registerAllFunctions();
-extern void init(const std::string &);
 extern char * createExecutor(const std::string &);
 
 namespace dbms
@@ -101,9 +82,8 @@ jint JNI_OnLoad(JavaVM * vm, void * /*reserved*/)
 {
     JNIEnv * env;
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8) != JNI_OK)
-    {
         return JNI_ERR;
-    }
+
     local_engine::JniErrorsGlobalState::instance().initialize(env);
 
     spark_row_info_class = local_engine::CreateGlobalClassReference(env, "Lio/glutenproject/row/SparkRowInfo;");
@@ -152,30 +132,26 @@ jint JNI_OnLoad(JavaVM * vm, void * /*reserved*/)
         = local_engine::GetMethodID(env, local_engine::ReservationListenerWrapper::reservation_listener_class, "unreserve", "(J)J");
 
     local_engine::JNIUtils::vm = vm;
-    local_engine::registerReadBufferBuildes(local_engine::ReadBufferBuilderFactory::instance());
-    local_engine::initRelParserFactory();
     return JNI_VERSION_1_8;
 }
 
 void JNI_OnUnload(JavaVM * vm, void * /*reserved*/)
 {
+    local_engine::BackendFinalizerUtil::finalizeGlobally();
+
     JNIEnv * env;
     vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8);
+
     local_engine::JniErrorsGlobalState::instance().destroy(env);
+
+    env->DeleteGlobalRef(spark_row_info_class);
     env->DeleteGlobalRef(split_result_class);
     env->DeleteGlobalRef(local_engine::ShuffleReader::input_stream_class);
-    env->DeleteGlobalRef(local_engine::SourceFromJavaIter::serialized_record_batch_iterator_class);
-    env->DeleteGlobalRef(local_engine::SparkRowToCHColumn::spark_row_interator_class);
     env->DeleteGlobalRef(local_engine::NativeSplitter::iterator_class);
     env->DeleteGlobalRef(local_engine::WriteBufferFromJavaOutputStream::output_stream_class);
+    env->DeleteGlobalRef(local_engine::SourceFromJavaIter::serialized_record_batch_iterator_class);
+    env->DeleteGlobalRef(local_engine::SparkRowToCHColumn::spark_row_interator_class);
     env->DeleteGlobalRef(local_engine::ReservationListenerWrapper::reservation_listener_class);
-    if (local_engine::SerializedPlanParser::global_context)
-    {
-        local_engine::SerializedPlanParser::global_context->shutdown();
-        local_engine::SerializedPlanParser::global_context.reset();
-        local_engine::SerializedPlanParser::shared_context.reset();
-    }
-    local_engine::BroadCastJoinBuilder::clean();
 }
 
 void Java_io_glutenproject_vectorized_ExpressionEvaluatorJniWrapper_nativeInitNative(JNIEnv * env, jobject, jbyteArray plan)
@@ -185,9 +161,17 @@ void Java_io_glutenproject_vectorized_ExpressionEvaluatorJniWrapper_nativeInitNa
     jbyte * plan_buf_addr = env->GetByteArrayElements(plan, nullptr);
     std::string plan_str;
     plan_str.assign(reinterpret_cast<const char *>(plan_buf_addr), plan_buf_size);
-    init(plan_str);
+    local_engine::BackendInitializerUtil::init(plan_str);
     LOCAL_ENGINE_JNI_METHOD_END(env, )
 }
+
+void Java_io_glutenproject_vectorized_ExpressionEvaluatorJniWrapper_nativeFinalizeNative(JNIEnv * env)
+{
+    LOCAL_ENGINE_JNI_METHOD_START
+    local_engine::BackendFinalizerUtil::finalizeSessionall();
+    LOCAL_ENGINE_JNI_METHOD_END(env, )
+}
+
 
 jlong Java_io_glutenproject_vectorized_ExpressionEvaluatorJniWrapper_nativeCreateKernelWithRowIterator(
     JNIEnv * env, jobject /*obj*/, jbyteArray plan)
@@ -254,7 +238,6 @@ jobject Java_io_glutenproject_row_RowIterator_nativeNext(JNIEnv * env, jobject /
 
     jobject spark_row_info_object
         = env->NewObject(spark_row_info_class, spark_row_info_constructor, offsets_arr, lengths_arr, address, column_number, total_size);
-
     return spark_row_info_object;
     LOCAL_ENGINE_JNI_METHOD_END(env, nullptr)
 }
