@@ -19,6 +19,10 @@ namespace local_engine
 {
 void ShuffleSplitter::split(DB::Block & block)
 {
+    if (block.rows() == 0)
+    {
+        return;
+    }
     Stopwatch watch;
     watch.start();
     computeAndCountPartitionId(block);
@@ -46,42 +50,31 @@ SplitResult ShuffleSplitter::stop()
 }
 void ShuffleSplitter::splitBlockByPartition(DB::Block & block)
 {
-    DB::IColumn::Selector selector;
-    buildSelector(block.rows(), selector);
-    std::vector<DB::Block> partitions;
-    for (size_t i = 0; i < options.partition_nums; ++i)
-        partitions.emplace_back(block.cloneEmpty());
-    for (size_t col = 0; col < block.columns(); ++col)
+    auto column_num = block.columns();
+    for (size_t i = 0; i < column_num; i++)
     {
-        DB::MutableColumns scattered = block.getByPosition(col).column->scatter(options.partition_nums, selector);
-        for (size_t i = 0; i < options.partition_nums; ++i)
-            partitions[i].getByPosition(col).column = std::move(scattered[i]);
+        for (size_t j = 0; j < partition_info.partition_num; ++j)
+        {
+            size_t from = partition_info.partition_start_points[j];
+            size_t length = partition_info.partition_start_points[j + 1] - from;
+            if (length == 0)
+                continue; // no data for this partition continue;
+            partition_buffer[j].appendSelective(i, block, partition_info.partition_selector, from, length);
+        }
     }
 
     for (size_t i = 0; i < options.partition_nums; ++i)
     {
-        split_result.raw_partition_length[i] += partitions[i].bytes();
         ColumnsBuffer & buffer = partition_buffer[i];
-        size_t first_cache_count = std::min(partitions[i].rows(), options.split_size - buffer.size());
-        if (first_cache_count < partitions[i].rows())
-        {
-            buffer.add(partitions[i], 0, first_cache_count);
-            spillPartition(i);
-            buffer.add(partitions[i], first_cache_count, partitions[i].rows());
-        }
-        else
-        {
-            buffer.add(partitions[i], 0, first_cache_count);
-        }
-        if (buffer.size() == options.split_size)
+        if (buffer.size() >= options.split_size)
         {
             spillPartition(i);
         }
     }
+
 }
 void ShuffleSplitter::init()
 {
-    partition_ids.reserve(options.split_size);
     partition_buffer.reserve(options.partition_nums);
     partition_outputs.reserve(options.partition_nums);
     partition_write_buffers.reserve(options.partition_nums);
@@ -97,13 +90,6 @@ void ShuffleSplitter::init()
         partition_write_buffers.emplace_back(nullptr);
         partition_cached_write_buffers.emplace_back(nullptr);
     }
-}
-
-void ShuffleSplitter::buildSelector(size_t row_nums, DB::IColumn::Selector & selector)
-{
-    assert(!partition_ids.empty() && "partition ids is empty");
-    selector = DB::IColumn::Selector(row_nums);
-    selector.assign(partition_ids.begin(), partition_ids.end());
 }
 
 void ShuffleSplitter::spillPartition(size_t partition_id)
@@ -242,6 +228,23 @@ void ColumnsBuffer::add(DB::Block & block, int start, int end)
         accumulated_columns[i]->insertRangeFrom(*block.getByPosition(i).column, start, end - start);
 }
 
+void ColumnsBuffer::appendSelective(size_t column_idx, const DB::Block & source, const DB::IColumn::Selector & selector, size_t from, size_t length)
+{
+    if (header.columns() == 0)
+        header = source.cloneEmpty();
+    if (accumulated_columns.empty())
+    {
+        accumulated_columns.reserve(source.columns());
+        for (size_t i = 0; i < source.columns(); i++)
+        {
+            auto column = source.getColumns()[i]->convertToFullColumnIfConst()->cloneEmpty();
+            column->reserve(prefer_buffer_size);
+            accumulated_columns.emplace_back(std::move(column));
+        }
+    }
+    accumulated_columns[column_idx]->insertRangeSelective(*source.getByPosition(column_idx).column->convertToFullColumnIfConst(), selector, from, length);
+}
+
 size_t ColumnsBuffer::size() const
 {
     if (accumulated_columns.empty())
@@ -280,7 +283,7 @@ void RoundRobinSplitter::computeAndCountPartitionId(DB::Block & block)
 {
     Stopwatch watch;
     watch.start();
-    partition_ids = selector_builder->build(block);
+    partition_info = selector_builder->build(block);
     split_result.total_compute_pid_time += watch.elapsedNanoseconds();
 }
 
@@ -305,7 +308,7 @@ HashSplitter::HashSplitter(SplitOptions options_) : ShuffleSplitter(std::move(op
         }
     }
 
-    selector_builder = std::make_unique<HashSelectorBuilder>(options.partition_nums, hash_fields, hash_fields_index, "murmurHash3_32");
+    selector_builder = std::make_unique<HashSelectorBuilder>(options.partition_nums, hash_fields, hash_fields_index, "cityHash64");
 }
 std::unique_ptr<ShuffleSplitter> HashSplitter::create(SplitOptions && options_)
 {
@@ -316,7 +319,7 @@ void HashSplitter::computeAndCountPartitionId(DB::Block & block)
 {
     Stopwatch watch;
     watch.start();
-    partition_ids = selector_builder->build(block);
+    partition_info = selector_builder->build(block);
     split_result.total_compute_pid_time += watch.elapsedNanoseconds();
 }
 
@@ -327,13 +330,13 @@ std::unique_ptr<ShuffleSplitter> RangeSplitter::create(SplitOptions && options_)
 
 RangeSplitter::RangeSplitter(SplitOptions options_) : ShuffleSplitter(std::move(options_))
 {
-    selector_builder = std::make_unique<RangeSelectorBuilder>(options.exprs);
+    selector_builder = std::make_unique<RangeSelectorBuilder>(options.exprs, options.partition_nums);
 }
 void RangeSplitter::computeAndCountPartitionId(DB::Block & block)
 {
     Stopwatch watch;
     watch.start();
-    partition_ids = selector_builder->build(block);
+    partition_info = selector_builder->build(block);
     split_result.total_compute_pid_time += watch.elapsedNanoseconds();
 }
 }
