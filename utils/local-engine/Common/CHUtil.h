@@ -122,9 +122,7 @@ private:
     inline static const String SPARK_S3_SECRET_KEY = "spark.hadoop.fs.s3a.secret.key";
     inline static const String SPARK_S3_ENDPOINT = "spark.hadoop.fs.s3a.endpoint";
 
-    static const std::map<std::string, std::string> S3_CONFIGS = {{SPARK_S3_ACCESS_KEY, "s3.access_key_id"},
-           {SPARK_S3_SECRET_KEY, "s3.secret_access_key"},
-           {SPARK_S3_ENDPOINT, "s3.endpoint"}};
+    inline static std::map<std::string, std::string> S3_CONFIGS;
 
     inline static std::once_flag init_flag;
     inline static DB::Context::ConfigurationPtr config;

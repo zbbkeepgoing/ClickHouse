@@ -612,6 +612,9 @@ void BackendInitializerUtil::initCompiledExpressionCache()
 
 void BackendInitializerUtil::init(const std::string & plan)
 {
+    S3_CONFIGS = {{SPARK_S3_ACCESS_KEY, "s3.access_key_id"},
+       {SPARK_S3_SECRET_KEY, "s3.secret_access_key"},
+       {SPARK_S3_ENDPOINT, "s3.endpoint"}};
     initConfig(plan);
     initLoggers();
 
